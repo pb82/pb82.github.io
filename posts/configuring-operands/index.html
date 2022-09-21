@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en" dir="auto">
+
+<head><meta charset="utf-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+<meta name="robots" content="index, follow">
+<title>Configuring Operands through custom resources | Blog of Peter Braun</title>
+<meta name="keywords" content="">
+<meta name="description" content="Kubernetes Operators often allow users to configure low level aspects of their operands and secondary resources. Typically, such settings are made available on the custom resource and reconciled into the operand.
+An example of this is the Grafana custom resource of the Grafana Operator. It exposes many configuration options that are reflected into the Grafana configuration file, but also allows you to configure properties of the Kubernetes resources of your Grafana installation.">
+<meta name="author" content="">
+<link rel="canonical" href="http://example.org/posts/configuring-operands/">
+<link crossorigin="anonymous" href="/assets/css/stylesheet.bc1149f4a72aa4858d3a9f71462f75e5884ffe8073ea9d6d5761d5663d651e20.css" integrity="sha256-vBFJ9KcqpIWNOp9xRi915YhP/oBz6p1tV2HVZj1lHiA=" rel="preload stylesheet" as="style">
+<script defer crossorigin="anonymous" src="/assets/js/highlight.f413e19d0714851f6474e7ee9632408e58ac146fbdbe62747134bea2fa3415e0.js" integrity="sha256-9BPhnQcUhR9kdOfuljJAjlisFG&#43;9vmJ0cTS&#43;ovo0FeA="
+    onload="hljs.initHighlightingOnLoad();"></script>
+<link rel="icon" href="http://example.org/favicon.ico">
+<link rel="mask-icon" href="http://example.org/safari-pinned-tab.svg">
+<meta name="theme-color" content="#2e2e33">
+<meta name="msapplication-TileColor" content="#2e2e33">
+<noscript>
+    <style>
+        #theme-toggle,
+        .top-link {
+            display: none;
+        }
+
+    </style>
+</noscript><meta property="og:title" content="Configuring Operands through custom resources" />
+<meta property="og:description" content="Kubernetes Operators often allow users to configure low level aspects of their operands and secondary resources. Typically, such settings are made available on the custom resource and reconciled into the operand.
+An example of this is the Grafana custom resource of the Grafana Operator. It exposes many configuration options that are reflected into the Grafana configuration file, but also allows you to configure properties of the Kubernetes resources of your Grafana installation." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="http://example.org/posts/configuring-operands/" /><meta property="article:section" content="posts" />
+<meta property="article:published_time" content="2022-09-04T20:07:40+02:00" />
+<meta property="article:modified_time" content="2022-09-04T20:07:40+02:00" />
+
+<meta name="twitter:card" content="summary"/>
+<meta name="twitter:title" content="Configuring Operands through custom resources"/>
+<meta name="twitter:description" content="Kubernetes Operators often allow users to configure low level aspects of their operands and secondary resources. Typically, such settings are made available on the custom resource and reconciled into the operand.
+An example of this is the Grafana custom resource of the Grafana Operator. It exposes many configuration options that are reflected into the Grafana configuration file, but also allows you to configure properties of the Kubernetes resources of your Grafana installation."/>
+
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position":  1 ,
+      "name": "Posts",
+      "item": "http://example.org/posts/"
+    }, 
+    {
+      "@type": "ListItem",
+      "position":  2 ,
+      "name": "Configuring Operands through custom resources",
+      "item": "http://example.org/posts/configuring-operands/"
+    }
+  ]
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BlogPosting",
+  "headline": "Configuring Operands through custom resources",
+  "name": "Configuring Operands through custom resources",
+  "description": "Kubernetes Operators often allow users to configure low level aspects of their operands and secondary resources. Typically, such settings are made available on the custom resource and reconciled into the operand.\nAn example of this is the Grafana custom resource of the Grafana Operator. It exposes many configuration options that are reflected into the Grafana configuration file, but also allows you to configure properties of the Kubernetes resources of your Grafana installation.",
+  "keywords": [
+    
+  ],
+  "articleBody": "Kubernetes Operators often allow users to configure low level aspects of their operands and secondary resources. Typically, such settings are made available on the custom resource and reconciled into the operand.\nAn example of this is the Grafana custom resource of the Grafana Operator. It exposes many configuration options that are reflected into the Grafana configuration file, but also allows you to configure properties of the Kubernetes resources of your Grafana installation. For example, you can add additional ports to your service, mount Secrets into the Grafana pod or expose additional environment variables.\nThese are all individual fields in the custom resource that are then reconciled and applied to the respective Kubernetes resource. In this blog post I would like to describe some problems with this approach as well as offer an alternative way and insights as to then this alternative is preferable.\nThe problem with exposing hand-picked configuration options The issue with hand-picking certain properties of Kubernetes resources, exposing them on a custom resource and then reconciling them into said resources is that it’s hard to foresee what a user might want to modify. For the Grafana Operator we often get requests to make additional fields of underlying resources configurable through the custom resource. Additionally, Kubernetes resources are changing with time. Granted, that happens rather slowly, but it does happen, for example when Ingress was promoted to v1.\nAnother issue with this approach is discoverability. Someone who is already familiar with configuring, for example a route, now needs to learn how to do that through your custom resource. And often only a subset of the available options is exposed.\nA better approach How could this be improved for both, the user and the developer? In the upcoming version of the Grafana Operator we have started exposing raw Kubernetes resources in the custom resource. To configure a deployment, you will have access to a Deployment object complete with the official spec and metadata. Same goes for all other resources that are managed by the Operator, the ServiceAccount, the Route or Ingress and the Service.\nUsers don’t have to learn how to configure a resource through the Grafana Operator. Instead, they can focus on the Kubernetes resources they want to configure.\nDifficulties Sounds easy? Not quite. There are a few obstacles to overcome.\nKubernetes resource definitions (e.g. Deployment) are huge and will bloat your CRDs. Not suitable for partial specification when we want to allow users exactly that. We need a merge strategy to produce the result from the operator defaults and the user overrides. We can tackle those issues. To address CRD bloat we’re going to strip the descriptions. When using kubebuilder to generate the CRDs from the code, we can pass the following parameter:\ncrd:maxDescLen=0 This cuts down the size of our CRDs by two thirds.\nLet’s address partial specification. What problem are we trying to solve here? Resources like deployments come with optional and mandatory fields. That is also true for the deployment spec in our CRD. As soon as a user adds a non-empty deployment spec, they are required to also spec out all the mandatory fields. This is not ideal. A user might only be interested in overriding the replicas, without providing a full pod template.\nThe solution to this is not as simple as adding another parameter. We’ve come across it while looking at Banzaicloud' s operator-tools project. The idea is to provide your own definition of the spec that has all the same fields but no mandatory fields.\nFor example, the original deployment spec defines the pod template like this:\ntype DeploymentSpec struct { ... Template v1.PodTemplateSpec `json:\"template\"` ... } In our own definition we define it as a pointer and add the omitempty tag to prevent the serializer from adding an empty key:\ntype CustomDeploymentSpec struct { ... Template *v14.PodTemplateSpec `json:\"template,omitempty\"` ... } We also define our own Deployment type:\ntype CustomDeployment struct { ObjectMeta ObjectMeta `json:\"metadata,omitempty\"` Spec CustomDeploymentSpec `json:\"spec,omitempty\"` } This gives us a resources that has the same structure as a Deploymnet, but all the top level fields are optional. All that’s left now is a merge strategy to merge our overridden, custom deployment with the existing one.\nWhat we want is a strategy that prefers existing fields in the original resource unless they are the default and ignores empty fields in the overridden resource. Thankfully, Kubernetes’ own apimachinery library contains everything we need in its strategicpatch package. apimachinery deals with schemas and conversion. strategicpatch compares two json representations of objects and produces a patch that can be applied.\nAgain, operator-tools contains an implementation of a Merge function using strategicpatch and we use a slightly modified version of it in the Grafana Operator.\nThe Result Let’s see this in action. The default Grafana deployment created by the Operator looks like this:\napiVersion: apps/v1 kind: Deployment metadata: annotations: deployment.kubernetes.io/revision: \"1\" name: grafana-a-deployment namespace: grafana spec: replicas: 1 selector: matchLabels: app: grafana-a strategy: rollingUpdate: maxSurge: 25% maxUnavailable: 25% type: RollingUpdate template: ... We want to override the strategy to Recreate, so we provide the following deployment in the Grafana CR spec:\nspec: deployment: spec: strategy: type: Recreate We don’t need to provide any of the fields that are mandatory for deployments, only the one we are interested in overriding: spec.strategy.type. This produces an updated deployment with a strategy set to Recreate.\nConclusion Exposing raw Kubernetes resources is a powerful way for users to configure Operands. Existing knowledge and documentation can be applied, everything that can be configured is included out of the box. There are a number of disadvantages though:\nThe size of the CRD increases considerably. If you need to configure a large number of resources, this might not work for you. This comes with a risk of misconfiguration. Users can override settings that your Operator- or Operand depend on. Overall, for us the advantages of such a flexible configuration system are worh it for us.\n",
+  "wordCount" : "984",
+  "inLanguage": "en",
+  "datePublished": "2022-09-04T20:07:40+02:00",
+  "dateModified": "2022-09-04T20:07:40+02:00",
+  "mainEntityOfPage": {
+    "@type": "WebPage",
+    "@id": "http://example.org/posts/configuring-operands/"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "Blog of Peter Braun",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "http://example.org/favicon.ico"
+    }
+  }
+}
+</script>
+</head>
+
+<body class=" dark" id="top">
+
+<header class="header">
+    <nav class="nav">
+        <div class="logo">
+            <a href="http://example.org/" accesskey="h" title="Blog of Peter Braun (Alt + H)">Blog of Peter Braun</a>
+            <div class="logo-switches">
+            </div>
+        </div>
+        <ul id="menu">
+        </ul>
+    </nav>
+</header>
+<main class="main">
+
+<article class="post-single">
+  <header class="post-header">
+    <div class="breadcrumbs"><a href="http://example.org/">Home</a>&nbsp;»&nbsp;<a href="http://example.org/posts/">Posts</a></div>
+    <h1 class="post-title">
+      Configuring Operands through custom resources<sup><span class="entry-isdraft">&nbsp;&nbsp;[draft]</span></sup>
+    </h1>
+    <div class="post-meta"><span title='2022-09-04 20:07:40 +0200 CEST'>September 4, 2022</span>
+
+</div>
+  </header> 
+  <div class="post-content"><p>Kubernetes Operators often allow users to configure low level aspects of their operands and secondary resources.
+Typically, such settings are made available on the custom resource and reconciled into the operand.</p>
+<p>An example of this is the <code>Grafana</code> custom resource of
+the <a href="https://github.com/grafana-operator/grafana-operator">Grafana Operator</a>.
+It exposes many configuration options that are reflected into the Grafana configuration file, but also allows you to
+configure properties of the Kubernetes resources of your Grafana installation.
+For example, you can add additional ports to your service, mount Secrets into the Grafana pod or expose additional
+environment variables.</p>
+<p>These are all individual fields in the custom resource that are then reconciled and applied to the respective Kubernetes
+resource.
+In this blog post I would like to describe some problems with this approach as well as offer an alternative way and
+insights as to then this alternative is preferable.</p>
+<h2 id="the-problem-with-exposing-hand-picked-configuration-options">The problem with exposing hand-picked configuration options<a hidden class="anchor" aria-hidden="true" href="#the-problem-with-exposing-hand-picked-configuration-options">#</a></h2>
+<p>The issue with hand-picking certain properties of Kubernetes resources, exposing them on a custom resource and then
+reconciling them into said resources is that it&rsquo;s hard to foresee what a user might want to modify.
+For the Grafana Operator we often get requests to make additional fields of underlying resources configurable through
+the custom resource.
+Additionally, Kubernetes resources are changing with time. Granted, that happens rather slowly, but it does happen, for
+example when <code>Ingress</code> was promoted to <code>v1</code>.</p>
+<p>Another issue with this approach is discoverability. Someone who is already familiar with configuring, for example a
+route, now needs to learn how to do that through your custom resource. And often only a subset of the available options
+is exposed.</p>
+<h2 id="a-better-approach">A better approach<a hidden class="anchor" aria-hidden="true" href="#a-better-approach">#</a></h2>
+<p>How could this be improved for both, the user and the developer?
+In the upcoming version of the Grafana Operator we have started exposing raw Kubernetes resources in the custom
+resource.
+To configure a deployment, you will have access to a <code>Deployment</code> object complete with the official <code>spec</code>
+and <code>metadata</code>.
+Same goes for all other resources that are managed by the Operator, the <code>ServiceAccount</code>, the <code>Route</code> or <code>Ingress</code> and
+the <code>Service</code>.</p>
+<p>Users don&rsquo;t have to learn how to configure a resource through the Grafana Operator. Instead, they can focus on the
+Kubernetes resources they want to configure.</p>
+<h2 id="difficulties">Difficulties<a hidden class="anchor" aria-hidden="true" href="#difficulties">#</a></h2>
+<p>Sounds easy? Not quite. There are a few obstacles to overcome.</p>
+<ol>
+<li>Kubernetes resource definitions (e.g. <code>Deployment</code>) are huge and will bloat your CRDs.</li>
+<li>Not suitable for partial specification when we want to allow users exactly that.</li>
+<li>We need a merge strategy to produce the result from the operator defaults and the user overrides.</li>
+</ol>
+<p>We can tackle those issues. To address CRD bloat we&rsquo;re going to strip the descriptions. When using <code>kubebuilder</code> to
+generate the CRDs from the code, we can pass the following parameter:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-shell" data-lang="shell"><span style="display:flex;"><span>crd:maxDescLen<span style="color:#f92672">=</span><span style="color:#ae81ff">0</span>
+</span></span></code></pre></div><p>This cuts down the size of our CRDs by two thirds.</p>
+<p>Let&rsquo;s address partial specification. What problem are we trying to solve here?
+Resources like deployments come with optional and mandatory fields. That is also true for the deployment spec in our
+CRD.
+As soon as a user adds a non-empty deployment spec, they are required to also spec out all the mandatory fields. This is
+not ideal.
+A user might only be interested in overriding the replicas, without providing a full pod template.</p>
+<p>The solution to this is not as simple as adding another parameter. We&rsquo;ve come across it while looking at Banzaicloud'
+s <a href="https://github.com/banzaicloud/operator-tools">operator-tools</a> project.
+The idea is to provide your own definition of the spec that has all the same fields but no mandatory fields.</p>
+<p>For example, the original deployment spec defines the pod template like this:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-go" data-lang="go"><span style="display:flex;"><span><span style="color:#66d9ef">type</span> <span style="color:#a6e22e">DeploymentSpec</span> <span style="color:#66d9ef">struct</span> {
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">...</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">Template</span> <span style="color:#a6e22e">v1</span>.<span style="color:#a6e22e">PodTemplateSpec</span> <span style="color:#e6db74">`json:&#34;template&#34;`</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">...</span>
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre></div><p>In our own definition we define it as a pointer and add the <code>omitempty</code> tag to prevent the serializer from adding an
+empty key:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-go" data-lang="go"><span style="display:flex;"><span><span style="color:#66d9ef">type</span> <span style="color:#a6e22e">CustomDeploymentSpec</span> <span style="color:#66d9ef">struct</span> {
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">...</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">Template</span> <span style="color:#f92672">*</span><span style="color:#a6e22e">v14</span>.<span style="color:#a6e22e">PodTemplateSpec</span> <span style="color:#e6db74">`json:&#34;template,omitempty&#34;`</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">...</span>
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre></div><p>We also define our own <code>Deployment</code> type:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-go" data-lang="go"><span style="display:flex;"><span><span style="color:#66d9ef">type</span> <span style="color:#a6e22e">CustomDeployment</span> <span style="color:#66d9ef">struct</span> {
+</span></span><span style="display:flex;"><span>	<span style="color:#a6e22e">ObjectMeta</span> <span style="color:#a6e22e">ObjectMeta</span>           <span style="color:#e6db74">`json:&#34;metadata,omitempty&#34;`</span>
+</span></span><span style="display:flex;"><span>	<span style="color:#a6e22e">Spec</span>       <span style="color:#a6e22e">CustomDeploymentSpec</span> <span style="color:#e6db74">`json:&#34;spec,omitempty&#34;`</span>
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre></div><p>This gives us a resources that has the same structure as a <code>Deploymnet</code>, but all the top level fields are optional.
+All that&rsquo;s left now is a merge strategy to merge our overridden, custom deployment with the existing one.</p>
+<p>What we want is a strategy that prefers existing fields in the original resource unless they are the default and ignores empty fields in the overridden resource.
+Thankfully, Kubernetes&rsquo; own <code>apimachinery</code> library contains everything we need in its <code>strategicpatch</code> package. <code>apimachinery</code> deals with schemas and conversion.
+<code>strategicpatch</code> compares two json representations of objects and produces a patch that can be applied.</p>
+<p>Again, <a href="https://github.com/banzaicloud/operator-tools">operator-tools</a> contains an implementation of a <code>Merge</code> function using <code>strategicpatch</code> and we use a slightly <a href="https://github.com/grafana-operator/grafana-operator-experimental/blob/master/api/v1beta1/typeoverrides.go#L150">modified</a> version of it in the Grafana Operator.</p>
+<h2 id="the-result">The Result<a hidden class="anchor" aria-hidden="true" href="#the-result">#</a></h2>
+<p>Let&rsquo;s see this in action. The default Grafana deployment created by the Operator looks like this:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">apps/v1</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Deployment</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">metadata</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">annotations</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">deployment.kubernetes.io/revision</span>: <span style="color:#e6db74">&#34;1&#34;</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">grafana-a-deployment</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">namespace</span>: <span style="color:#ae81ff">grafana</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">spec</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">replicas</span>: <span style="color:#ae81ff">1</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">selector</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">matchLabels</span>:
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">app</span>: <span style="color:#ae81ff">grafana-a</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">strategy</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">rollingUpdate</span>:
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">maxSurge</span>: <span style="color:#ae81ff">25</span><span style="color:#ae81ff">%</span>
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">maxUnavailable</span>: <span style="color:#ae81ff">25</span><span style="color:#ae81ff">%</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">type</span>: <span style="color:#ae81ff">RollingUpdate</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">template</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#ae81ff">...</span>
+</span></span></code></pre></div><p>We want to override the strategy to <code>Recreate</code>, so we provide the following deployment in the Grafana CR spec:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span>  <span style="color:#f92672">spec</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">deployment</span>:
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">spec</span>:
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">strategy</span>:
+</span></span><span style="display:flex;"><span>          <span style="color:#f92672">type</span>: <span style="color:#ae81ff">Recreate</span>
+</span></span></code></pre></div><p>We don&rsquo;t need to provide any of the fields that are mandatory for deployments, only the one we are interested in overriding: <code>spec.strategy.type</code>.
+This produces an updated deployment with a strategy set to <code>Recreate</code>.</p>
+<h2 id="conclusion">Conclusion<a hidden class="anchor" aria-hidden="true" href="#conclusion">#</a></h2>
+<p>Exposing raw Kubernetes resources is a powerful way for users to configure Operands. Existing knowledge and documentation can be applied, everything that can be configured is included out of the box.
+There are a number of disadvantages though:</p>
+<ul>
+<li>The size of the CRD increases considerably. If you need to configure a large number of resources, this might not work for you.</li>
+<li>This comes with a risk of misconfiguration. Users can override settings that your Operator- or Operand depend on.</li>
+</ul>
+<p>Overall, for us the advantages of such a flexible configuration system are worh it for us.</p>
+
+
+  </div>
+
+  <footer class="post-footer">
+    <ul class="post-tags">
+    </ul>
+  </footer>
+</article>
+    </main>
+    
+<footer class="footer">
+    <span>&copy; 2022 <a href="http://example.org/">Blog of Peter Braun</a></span>
+    <span>
+        Powered by
+        <a href="https://gohugo.io/" rel="noopener noreferrer" target="_blank">Hugo</a> &
+        <a href="https://github.com/adityatelange/hugo-PaperMod/" rel="noopener" target="_blank">PaperMod</a>
+    </span>
+</footer>
+<a href="#top" aria-label="go to top" title="Go to Top (Alt + G)" class="top-link" id="top-link" accesskey="g">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 12 6" fill="currentColor">
+        <path d="M12 6H0l6-6z" />
+    </svg>
+</a>
+
+<script>
+    let menu = document.getElementById('menu')
+    if (menu) {
+        menu.scrollLeft = localStorage.getItem("menu-scroll-position");
+        menu.onscroll = function () {
+            localStorage.setItem("menu-scroll-position", menu.scrollLeft);
+        }
+    }
+
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+        anchor.addEventListener("click", function (e) {
+            e.preventDefault();
+            var id = this.getAttribute("href").substr(1);
+            if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+                document.querySelector(`[id='${decodeURIComponent(id)}']`).scrollIntoView({
+                    behavior: "smooth"
+                });
+            } else {
+                document.querySelector(`[id='${decodeURIComponent(id)}']`).scrollIntoView();
+            }
+            if (id === "top") {
+                history.replaceState(null, null, " ");
+            } else {
+                history.pushState(null, null, `#${id}`);
+            }
+        });
+    });
+
+</script>
+<script>
+    var mybutton = document.getElementById("top-link");
+    window.onscroll = function () {
+        if (document.body.scrollTop > 800 || document.documentElement.scrollTop > 800) {
+            mybutton.style.visibility = "visible";
+            mybutton.style.opacity = "1";
+        } else {
+            mybutton.style.visibility = "hidden";
+            mybutton.style.opacity = "0";
+        }
+    };
+
+</script>
+</body>
+
+</html>

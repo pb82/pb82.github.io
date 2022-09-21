@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/">
+  <channel>
+    <title>Posts on Blog of Peter Braun</title>
+    <link>http://example.org/posts/</link>
+    <description>Recent content in Posts on Blog of Peter Braun</description>
+    <generator>Hugo -- gohugo.io</generator>
+    <language>en-us</language>
+    <lastBuildDate>Sun, 04 Sep 2022 20:07:40 +0200</lastBuildDate><atom:link href="http://example.org/posts/index.xml" rel="self" type="application/rss+xml" />
+    <item>
+      <title>Configuring Operands through custom resources</title>
+      <link>http://example.org/posts/configuring-operands/</link>
+      <pubDate>Sun, 04 Sep 2022 20:07:40 +0200</pubDate>
+      
+      <guid>http://example.org/posts/configuring-operands/</guid>
+      <description>Kubernetes Operators often allow users to configure low level aspects of their operands and secondary resources. Typically, such settings are made available on the custom resource and reconciled into the operand.
+An example of this is the Grafana custom resource of the Grafana Operator. It exposes many configuration options that are reflected into the Grafana configuration file, but also allows you to configure properties of the Kubernetes resources of your Grafana installation.</description>
+    </item>
+    
+  </channel>
+</rss>
